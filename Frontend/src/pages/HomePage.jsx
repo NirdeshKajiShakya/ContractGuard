@@ -41,9 +41,10 @@ export default function HomePage() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       
-      console.log(res.data.data);
-      console.log(res.data.message);
-      setHumanizedText(res.data.data.humanizedText || res.data.data);
+      console.log('Humanize response:', res.data);
+      
+      // Backend sends: { humanizedText, keyPoints, meta, message }
+      setHumanizedText(res.data.humanizedText || '');
       setHumanizing(false);
     } catch (error) {
       console.error('Error humanizing contract:', error);
