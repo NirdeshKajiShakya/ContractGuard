@@ -1,14 +1,62 @@
 import { Shield, AlertTriangle, CheckCircle, Info, FileText } from 'lucide-react';
-
+import { jsPDF } from "jspdf";
 export default function AnalysisSection({ analysis }) {
-  // Calculate overall risk level based on risk scores
+
+  function exportPDF() {
+    if (!analysis || analysis.length === 0) return;
+  
+    const doc = new jsPDF();
+  
+    let y = 10;
+  
+    doc.setFontSize(16);
+    doc.text("Contract Analysis Report", 105, y, { align: "center" });
+    y += 10;
+  
+    if (overallRiskLevel) {
+      doc.setFontSize(12);
+      doc.text(`Overall Risk Level: ${overallRiskLevel}`, 10, y);
+      doc.text(`Total Issues: ${analysis.length}`, 10, y + 7);
+      y += 15;
+    }
+  
+    analysis.forEach((item, idx) => {
+      doc.setFontSize(12);
+      doc.text(`Issue ${idx + 1}`, 10, y);
+      y += 7;
+      doc.setFontSize(10);
+      doc.text(`Risk Score: ${item.riskScore}/10`, 10, y);
+      y += 7;
+  
+  
+      const clauseLines = doc.splitTextToSize(`Clause: ${item.clause}`, 180);
+      doc.text(clauseLines, 10, y);
+      y += clauseLines.length * 7;
+  
+      const explanationLines = doc.splitTextToSize(`Why risky: ${item.explanation}`, 180);
+      doc.text(explanationLines, 10, y);
+      y += explanationLines.length * 7;
+  
+      const recommendationLines = doc.splitTextToSize(`Recommendation: ${item.recommendation}`, 180);
+      doc.text(recommendationLines, 10, y);
+      y += recommendationLines.length * 10;
+  
+      // Add page if exceeding
+      if (y > 280) {
+        doc.addPage();
+        y = 10;
+      }
+    });
+  
+    doc.save("contract-analysis.pdf");
+  }
   const getOverallRiskLevel = () => {
     if (!analysis || !Array.isArray(analysis) || analysis.length === 0) return null;
     
     const avgRisk = analysis.reduce((sum, item) => sum + (item.riskScore || 0), 0) / analysis.length;
     const maxRisk = Math.max(...analysis.map(item => item.riskScore || 0));
     
-    // Use max risk for overall level, but consider average too
+
     if (maxRisk >= 8) return 'high';
     if (maxRisk >= 5 || avgRisk >= 5) return 'medium';
     return 'low';
@@ -58,7 +106,14 @@ export default function AnalysisSection({ analysis }) {
         <Shield className="w-5 h-5 text-indigo-600" />
         <h3 className="text-lg font-semibold text-gray-800">Analysis Results</h3>
       </div>
-
+      {hasAnalysis && (
+    <button
+      onClick={exportPDF}
+      className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-1 rounded"
+    >
+      Export PDF
+    </button>
+  )}
       {!hasAnalysis ? (
         <div className="h-64 flex flex-col items-center justify-center text-gray-400">
           <Shield className="w-16 h-16 mb-3 opacity-20" />
@@ -68,7 +123,7 @@ export default function AnalysisSection({ analysis }) {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Overall Risk Level */}
+
           {overallRiskLevel && (
             <div className="flex items-center gap-2 pb-3 border-b">
               <span className="text-sm text-gray-600">Overall Risk Level:</span>
@@ -89,7 +144,6 @@ export default function AnalysisSection({ analysis }) {
             </p>
           </div>
 
-          {/* Analysis Items */}
           <div className="space-y-4 max-h-96 overflow-y-auto">
             {analysis.map((item, idx) => (
               <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
@@ -103,7 +157,6 @@ export default function AnalysisSection({ analysis }) {
                       </span>
                     </div>
 
-                    {/* Clause */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <FileText className="w-4 h-4 text-gray-500" />
