@@ -32,11 +32,13 @@ Contract text to humanize:
 {contract_text}
 ---
 
+IMPORTANT: Return ONLY a valid JSON object. Use \\n for newlines in strings. Do not include any text before or after the JSON.
+
 Return your response as a JSON object with this structure:
 {{
   "original_length": <number of words in original>,
   "simplified_length": <number of words in simplified version>,
-  "humanized_text": "<the full simplified text here>",
+  "humanized_text": "<the full simplified text here - use \\n for line breaks>",
   "key_points": [
     "<bullet point 1: most important thing to know>",
     "<bullet point 2: second most important thing>",
@@ -128,14 +130,59 @@ def humanize_chunk(chunk, chunk_num, total_chunks):
                 return {"error": f"API Error: {response_data['error']}"}
             return {"error": "AI returned empty response"}
         
-        # Extract JSON from response
-        json_match = re.search(r'\{[\s\S]*"humanized_text"[\s\S]*\}', ai_response)
-        if json_match:
-            cleaned_text = json_match.group(0)
-        else:
-            cleaned_text = ai_response.strip().replace("```json", "").replace("```", "").strip()
+        sys.stderr.write(f"Chunk {chunk_num}: Received {len(ai_response)} character response\n")
+        sys.stderr.write(f"Chunk {chunk_num}: Response preview: {ai_response[:300]}\n")
         
-        parsed_result = json.loads(cleaned_text)
+        # Extract JSON from response - try multiple strategies
+        parsed_result = None
+        
+        # Strategy 1: Try parsing the response directly (in case it's pure JSON)
+        try:
+            parsed_result = json.loads(ai_response)
+            sys.stderr.write(f"Chunk {chunk_num}: Parsed JSON successfully (Strategy 1)\n")
+        except json.JSONDecodeError:
+            pass
+        
+        # Strategy 2: Extract JSON from code blocks
+        if not parsed_result:
+            try:
+                # Remove markdown code blocks
+                cleaned = ai_response.strip()
+                if cleaned.startswith("```"):
+                    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.MULTILINE)
+                    cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+                
+                parsed_result = json.loads(cleaned)
+                sys.stderr.write(f"Chunk {chunk_num}: Parsed JSON successfully (Strategy 2)\n")
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        
+        # Strategy 3: Find JSON object boundaries
+        if not parsed_result:
+            try:
+                # Find the outermost braces
+                start = ai_response.find('{')
+                end = ai_response.rfind('}')
+                if start != -1 and end != -1:
+                    json_str = ai_response[start:end+1]
+                    parsed_result = json.loads(json_str)
+                    sys.stderr.write(f"Chunk {chunk_num}: Parsed JSON successfully (Strategy 3)\n")
+            except (json.JSONDecodeError, ValueError):
+                pass
+        
+        # Strategy 4: Fallback - manually construct response from AI text
+        if not parsed_result:
+            sys.stderr.write(f"Chunk {chunk_num}: All JSON parsing failed, using fallback construction\n")
+            sys.stderr.write(f"Full AI response:\n{ai_response}\n")
+            
+            # Create a valid response using the AI's text even if it's not JSON
+            parsed_result = {
+                "humanized_text": ai_response.strip(),
+                "original_length": len(chunk.split()),
+                "simplified_length": len(ai_response.split()),
+                "key_points": ["AI did not return structured JSON - showing raw response"]
+            }
+            sys.stderr.write(f"Chunk {chunk_num}: Created fallback response\n")
         
         if "humanized_text" not in parsed_result:
             return {"error": "AI response missing 'humanized_text' field"}
@@ -145,6 +192,7 @@ def humanize_chunk(chunk, chunk_num, total_chunks):
         
     except json.JSONDecodeError as e:
         sys.stderr.write(f"Chunk {chunk_num}: JSON decode error: {e}\n")
+        sys.stderr.write(f"Raw AI response: {ai_response[:300] if 'ai_response' in locals() else 'N/A'}\n")
         return {"error": f"Invalid JSON: {str(e)}"}
     except requests.exceptions.Timeout:
         sys.stderr.write(f"Chunk {chunk_num}: Request timed out\n")
@@ -248,3 +296,40 @@ def humanize_clause(clause_text: str) -> dict:
         A dictionary with the simplified version. 
     """
     return simplify(clause_text)
+
+# Main execution block - reads from stdin and outputs to stdout
+if __name__ == "__main__":
+    try:
+        # Read input from stdin
+        input_data = sys.stdin.read()
+        
+        if not input_data:
+            print(json.dumps({"error": "No input received from stdin"}))
+            sys.stdout.flush()
+            sys.exit(1)
+        
+        # Parse the JSON input
+        request_data = json.loads(input_data)
+        contract_text = request_data.get("contract_text", "")
+        
+        if not contract_text:
+            print(json.dumps({"error": "No contract text provided"}))
+            sys.stdout.flush()
+            sys.exit(1)
+        
+        # Run the humanization
+        result = simplify(contract_text)
+        
+        # Output the result as JSON to stdout
+        output = json.dumps(result)
+        print(output)
+        sys.stdout.flush()
+        
+    except json.JSONDecodeError as e:
+        print(json.dumps({"error": f"Invalid JSON input: {str(e)}"}))
+        sys.stdout.flush()
+        sys.exit(1)
+    except Exception as e:
+        print(json.dumps({"error": f"Unexpected error: {str(e)}"}))
+        sys.stdout.flush()
+        sys.exit(1)
