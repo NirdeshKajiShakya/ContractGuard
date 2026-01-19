@@ -1,5 +1,6 @@
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
+import Tesseract from 'tesseract.js';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -88,6 +89,10 @@ const analyzePDF = async (req,res)=>{
                 });
                 contractText = result.value;
               }
+            else if (mimeType.startsWith("image/")) {
+              const ocrResult = await Tesseract.recognize(req.file.buffer, 'eng');
+              contractText = ocrResult?.data?.text || "";
+            }
 
 
         }

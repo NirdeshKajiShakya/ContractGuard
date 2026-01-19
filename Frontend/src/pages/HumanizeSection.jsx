@@ -110,7 +110,6 @@ export default function HumanizeSection({
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <label className="cursor-pointer">
                   <div className="relative overflow-hidden group h-12 border-2 border-dashed rounded-xl transition-all hover:border-gray-400 hover:bg-gray-50 flex items-center justify-center gap-2" style={{ borderColor: humanizeFile ? '#4f39f6' : '#d1d5db' }}>

@@ -77,7 +77,7 @@ export default function InputSection({ contractText, setContractText, uploadedFi
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.pdf,.doc,.docx"
+            accept=".txt,.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
             onChange={handleFileUpload}
             className="hidden"
           />

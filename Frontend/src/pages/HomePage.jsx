@@ -1,44 +1,23 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import { useState } from 'react';
 import Header from './Header';
 import InputSection from './InputSection';
 import AnalysisSection from './AnalysisSection';
-import HumanizeSection from './HumanizeSection';
 import Footer from './Footer';
+import api from '../api/axios';
+import HumanizeSection from './HumanizeSection';
 
 export default function HomePage() {
   const [contractText, setContractText] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
-  
-  // Separate state for Humanize section
+
+
   const [humanizeInput, setHumanizeInput] = useState('');
   const [humanizeFile, setHumanizeFile] = useState(null);
   const [humanizedText, setHumanizedText] = useState('');
   const [humanizing, setHumanizing] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handleAnalyze = async () => {
-    if (!contractText.trim() && !uploadedFile) return;
-    
-    setAnalyzing(true);
-    
-    try {
-      // When backend is ready, replace this with actual API call
-      const response = await axios.post('http://localhost:5000/api/analysis/analyze', {
-        contractText: contractText || uploadedFile.name
-      });
-      
-      setAnalysis(response.data);
-    } catch (error) {
-      console.error('Error analyzing contract:', error);
-      alert('Failed to analyze contract. Please try again.');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
+  const [copied, setCopied] = useState(false)
   const handleHumanize = async () => {
     if (!humanizeInput.trim() && !humanizeFile) {
       alert('Please enter or upload text to humanize');
@@ -48,16 +27,27 @@ export default function HomePage() {
     setHumanizing(true);
     
     try {
-      // When backend is ready, replace this with actual API call
-      const response = await axios.post('http://localhost:5000/api/analysis/humanize', {
-        contractText: humanizeInput || humanizeFile.name
+      const formData = new FormData();
+
+      if (humanizeFile) {
+        formData.append("file", humanizeFile);
+      }
+
+      if (humanizeInput.trim()) {
+        formData.append("text", humanizeInput);
+      }
+
+      const res = await api.post("/api/humanize", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
       
-      setHumanizedText(response.data.humanizedText);
+      console.log(res.data.data);
+      console.log(res.data.message);
+      setHumanizedText(res.data.data.humanizedText || res.data.data);
+      setHumanizing(false);
     } catch (error) {
       console.error('Error humanizing contract:', error);
       alert('Failed to humanize contract. Please try again.');
-    } finally {
       setHumanizing(false);
     }
   };
@@ -67,12 +57,42 @@ export default function HomePage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  const handleAnalyze = async () => {
+    if (!contractText.trim() && !uploadedFile) return;
+    setAnalyzing(true);
+    
+    try {
 
+const formData = new FormData();
+
+if (uploadedFile) {
+  formData.append("file", uploadedFile); // same name backend expects
+}
+
+if (contractText.trim()) {
+  formData.append("text", contractText);
+}
+const res = await api.post("/api/upload",formData,{
+  headers: { "Content-Type": "multipart/form-data" }
+})
+      
+console.log(res.data.data)
+console.log(res.data.message)
+setAnalysis(res.data.data);
+setAnalyzing(false);
+    } 
+    catch (error) {
+      console.error('Error analyzing contract:', error);
+      alert('Failed to analyze contract. Please try again.');
+      setAnalyzing(false);
+    }
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Header />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+
         {/* Hero Section */}
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-gray-800 mb-3">
@@ -84,22 +104,19 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Analysis Section */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className="grid md:grid-cols-2 gap-6">
           <InputSection 
             contractText={contractText}
             setContractText={setContractText}
             uploadedFile={uploadedFile}
             setUploadedFile={setUploadedFile}
             analyzing={analyzing}
-            handleAnalyze={handleAnalyze}
-          />
+            handleAnalyze={handleAnalyze} />
+            
           <AnalysisSection analysis={analysis} />
         </div>
-
-        {/* Humanize Section */}
-        <div className="mb-8">
-          <HumanizeSection 
+        <div className="mb-8 mt-8">
+          <HumanizeSection
             humanizeInput={humanizeInput}
             setHumanizeInput={setHumanizeInput}
             humanizeFile={humanizeFile}

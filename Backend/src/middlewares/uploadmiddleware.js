@@ -7,12 +7,19 @@ import { fileURLToPath } from 'url';
 
 const storage = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
-const allowedTypes = [ "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+  const allowedTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/webp',
+  ];
+
   if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true); 
+    cb(null, true);
   } else {
-    cb(new Error('Only PDF or Docx files are allowed!'), false); 
+    cb(new Error('Only PDF, DOCX, or image files (png/jpg/webp) are allowed!'), false);
   }
 };
 
