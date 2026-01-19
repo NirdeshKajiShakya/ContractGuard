@@ -1,4 +1,3 @@
-google-generativeai
 pypdf2
 requests
 beautifulsoup4

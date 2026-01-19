@@ -1,4 +1,5 @@
-from ai import analyzer, text_extractor
+import analyzer
+import text_extractor
 
 def test_with_plain_text():
     print("\n--- 1. Testing with plain text ---")

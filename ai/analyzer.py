@@ -1,16 +1,19 @@
 import os
-import google.generativeai as genai
+import requests
 import json
 from dotenv import load_dotenv
+import re
 
 # Load environment variables from .env file
 load_dotenv()
 
 # --- Configuration ---
-API_KEY = os.getenv("GOOGLE_API_KEY")
+API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not API_KEY:
-    raise ValueError("GOOGLE_API_KEY not found.  Please create a .env file and add your key.")
-genai.configure(api_key=API_KEY)
+    raise ValueError("OPENROUTER_API_KEY not found. Please create a .env file and add your key.")
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 # --- Prompt Engineering ---
 PROMPT_TEMPLATE = """
@@ -43,7 +46,7 @@ Example output:
 
 def run(text_content):
     """
-    Analyzes the contract text using the Gemini API. 
+    Analyzes the contract text using the OpenRouter API with Llama. 
 
     Args:
         text_content:  The full text of the contract. 
@@ -54,15 +57,39 @@ def run(text_content):
     if not text_content or not text_content.strip():
         return {"error": "Input text is empty or contains only whitespace."}
 
-    model = genai.GenerativeModel('gemini-pro')
-    prompt = PROMPT_TEMPLATE.format(contract_text=text_content[: 28000])  # Truncate to be safe
+    prompt = PROMPT_TEMPLATE.format(contract_text=text_content[:28000])  # Truncate to be safe
+
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 4000
+    }
 
     try:
-        response = model.generate_content(prompt)
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        response_data = response.json()
+        ai_response = response_data["choices"][0]["message"]["content"]
+        
+        # Better JSON extraction - handle code blocks and find JSON object
+        json_match = re.search(r'\{[\s\S]*"analysis"[\s\S]*\][\s\S]*\}', ai_response)
+        if json_match:
+            cleaned_text = json_match.group(0)
+        else:
+            cleaned_text = ai_response.strip().replace("```json", "").replace("```", "").strip()
         
         return json.loads(cleaned_text)
     except json.JSONDecodeError:
-        return {"error": "AI response was not valid JSON.", "raw_response": response.text}
+        return {"error": "AI response was not valid JSON.", "raw_response": ai_response if 'ai_response' in locals() else "No response"}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API request failed: {e}"}
     except Exception as e:
-        return {"error":  f"An unexpected error occurred: {e}"}
+        return {"error": f"An unexpected error occurred: {e}"}
