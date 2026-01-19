@@ -20,10 +20,10 @@ def fetch_text_from_url(url):
     """Fetches and extracts clean text from a URL."""
     try:
         response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status() 
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Remove script and style elements
+   
         for script_or_style in soup(["script", "style"]):
             script_or_style.decompose()
             

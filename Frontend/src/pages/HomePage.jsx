@@ -26,7 +26,7 @@ if (uploadedFile) {
 }
 
 if (contractText.trim()) {
-  formData.append("text", contractText); // fallback text
+  formData.append("text", contractText);
 }
 const res = await api.post("/api/upload",formData,{
   headers: { "Content-Type": "multipart/form-data" }

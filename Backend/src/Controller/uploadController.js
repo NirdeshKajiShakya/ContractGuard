@@ -1,9 +1,16 @@
 import mammoth from 'mammoth';
 import * as pdfParse from 'pdf-parse';
+import path from 'path';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 async function analyzeWithAI(contractText) {
     return new Promise((resolve, reject) => {
 
-      const pythonScript = path.join(__dirname, '../../Ai/analyzer.py');
+      const pythonScript = path.join(__dirname, '../../../Ai/analyzer.py');
       
    
       const python = spawn('python3', [pythonScript]);
@@ -39,7 +46,16 @@ async function analyzeWithAI(contractText) {
       });
     });
   }
+  function formatAnalysisForFrontend(rawAnalysis) {
+    if (!rawAnalysis?.analysis || !Array.isArray(rawAnalysis.analysis)) return [];
   
+    return rawAnalysis.analysis.map((item) => ({
+      clause: item.clause_text.trim(),
+      riskScore: item.risk_score,
+      explanation: item.explanation.trim(),
+      recommendation: item.recommendation.trim()
+    }));
+  }
 const analyzePDF = async (req,res)=>{
     console.log("analyzing pdf api hitting")
     try {
@@ -82,8 +98,8 @@ contractText = contractText.trim();
             });
           }
     const analysis = await analyzeWithAI(contractText);
-
-    res.status(200).send({data:analysis,message:"Contract analyzed successfully"});
+    const cleanAnalysis = formatAnalysisForFrontend(analysis);
+    res.status(200).send({data:cleanAnalysis,message:"Contract analyzed successfully"});
     } catch (error) {
         console.log(
             error.message
