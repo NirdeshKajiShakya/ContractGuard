@@ -1,5 +1,5 @@
 import mammoth from 'mammoth';
-import * as pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -64,8 +64,10 @@ const analyzePDF = async (req,res)=>{
             const mimeType = req.file.mimetype;
       
             if (mimeType === "application/pdf") {
-              const pdfData = await pdfParse(req.file.buffer);
+              const pdfParser = new PDFParse({ data: req.file.buffer });
+              const pdfData = await pdfParser.getText();
               contractText = pdfData.text;
+              await pdfParser.destroy();
             }
             else if (
                 mimeType ===
