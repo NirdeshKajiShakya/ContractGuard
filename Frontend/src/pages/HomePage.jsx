@@ -35,6 +35,7 @@ const res = await api.post("/api/upload",formData,{
 console.log(res.data.data)
 console.log(res.data.message)
 setAnalysis(res.data.data);
+setAnalyzing(false);
     } 
     catch (error) {
       console.error('Error analyzing contract:', error);
