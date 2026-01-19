@@ -13,7 +13,7 @@ async function analyzeWithAI(contractText) {
       const pythonScript = path.join(__dirname, '../../../Ai/analyzer.py');
       
    
-      const python = spawn('python3', [pythonScript]);
+      const python = spawn('python', [pythonScript]);
       
       let dataString = '';
       let errorString = '';
@@ -23,24 +23,34 @@ async function analyzeWithAI(contractText) {
       python.stdin.end();
       
       python.stdout.on('data', (data) => {
-        dataString += data.toString();
+        const chunk = data.toString();
+  console.log("PYTHON STDOUT:", chunk);
+  dataString += chunk;
+        // dataString += data.toString();
       });
       
 
       python.stderr.on('data', (data) => {
-        errorString += data.toString();
+        const chunk = data.toString();
+        console.log("PYTHON STDERR:", chunk);
+        errorString += chunk;
+        // errorString += data.toString();
       });
       
  
       python.on('close', (code) => {
         if (code !== 0) {
-          reject(new Error(`Python process exited with code ${code}: ${errorString}`));
+          reject(new Error(`Python process exited with code ${code}: ${errorString || dataString}`));
         } else {
           try {
+            if (!dataString || dataString.trim().length === 0) {
+              reject(new Error('Python script returned empty output'));
+              return;
+            }
             const result = JSON.parse(dataString);
             resolve(result);
           } catch (e) {
-            reject(new Error(`Failed to parse Python output: ${e.message}`));
+            reject(new Error(`Failed to parse Python output: ${e.message}. Output was: ${dataString.substring(0, 200)}`));
           }
         }
       });
@@ -48,7 +58,7 @@ async function analyzeWithAI(contractText) {
   }
   function formatAnalysisForFrontend(rawAnalysis) {
     if (!rawAnalysis?.analysis || !Array.isArray(rawAnalysis.analysis)) return [];
-  
+   console.log(rawAnalysis)
     return rawAnalysis.analysis.map((item) => ({
       clause: item.clause_text.trim(),
       riskScore: item.risk_score,
@@ -83,6 +93,7 @@ const analyzePDF = async (req,res)=>{
         }
         if ( !contractText && req.body.text) {
             contractText = req.body.text;
+            console.log(contractText)
             if(contractText){
               console.log("sucessfuly fetched contract text")
             }
@@ -100,7 +111,9 @@ contractText = contractText.trim();
             });
           }
     const analysis = await analyzeWithAI(contractText);
+    console.log(analysis)
     const cleanAnalysis = formatAnalysisForFrontend(analysis);
+    console.log(cleanAnalysis)
     res.status(200).send({data:cleanAnalysis,message:"Contract analyzed successfully"});
     } catch (error) {
         console.log(

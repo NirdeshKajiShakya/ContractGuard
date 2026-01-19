@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import json
 from dotenv import load_dotenv
@@ -69,7 +70,7 @@ def run(text_content):
         "messages": [
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 4000
+
     }
 
     try:
@@ -93,3 +94,33 @@ def run(text_content):
         return {"error": f"API request failed: {e}"}
     except Exception as e:
         return {"error": f"An unexpected error occurred: {e}"}
+
+# Main execution block - reads from stdin and outputs to stdout
+if __name__ == "__main__":
+    try:
+        # Read JSON input from stdin
+        input_data = sys.stdin.read()
+        if not input_data:
+            print(json.dumps({"error": "No input provided"}))
+            sys.exit(1)
+        
+        # Parse the JSON input
+        parsed_input = json.loads(input_data)
+        contract_text = parsed_input.get("text", "")
+        
+        if not contract_text:
+            print(json.dumps({"error": "No text field in input"}))
+            sys.exit(1)
+        
+        # Run the analysis
+        result = run(contract_text)
+        
+        # Output the result as JSON to stdout
+        print(json.dumps(result))
+        
+    except json.JSONDecodeError as e:
+        print(json.dumps({"error": f"Failed to parse input JSON: {e}"}))
+        sys.exit(1)
+    except Exception as e:
+        print(json.dumps({"error": f"Unexpected error: {e}"}))
+        sys.exit(1)
