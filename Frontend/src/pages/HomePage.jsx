@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import axios from 'axios';
 import Header from './Header';
 import InputSection from './InputSection';
 import AnalysisSection from './AnalysisSection';
 import Footer from './Footer';
+import api from '../api/axios';
 
 export default function HomePage() {
   const [contractText, setContractText] = useState('');
@@ -11,56 +11,37 @@ export default function HomePage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
 
+
+  
   const handleAnalyze = async () => {
     if (!contractText.trim() && !uploadedFile) return;
-    
     setAnalyzing(true);
     
     try {
-      // For now, just simulate analysis with mock data
-      // Later you can send uploadedFile to backend when ready
-      setTimeout(() => {
-        setAnalysis({
-          riskLevel: 'medium',
-          keyPoints: [
-            {
-              type: 'warning',
-              title: 'Data Collection',
-              description: 'The service collects your browsing history, location data, and contact information.'
-            },
-            {
-              type: 'danger',
-              title: 'Third-Party Sharing',
-              description: 'Your data may be shared with advertising partners and affiliates without explicit consent.'
-            },
-            {
-              type: 'info',
-              title: 'Termination Rights',
-              description: 'The company can terminate your account at any time without prior notice.'
-            },
-            {
-              type: 'warning',
-              title: 'Liability Limitation',
-              description: 'The company limits its liability to $100, even in cases of data breaches or service failures.'
-            },
-            {
-              type: 'safe',
-              title: 'Right to Delete',
-              description: 'You can request deletion of your personal data within 30 days.'
-            }
-          ],
-          summary: 'This agreement contains several concerning clauses about data usage and company liability. Pay special attention to data sharing practices and termination conditions.'
-        });
-        setAnalyzing(false);
-      }, 2000);
+
+const formData = new FormData();
+
+if (uploadedFile) {
+  formData.append("file", uploadedFile); // same name backend expects
+}
+
+if (contractText.trim()) {
+  formData.append("text", contractText); // fallback text
+}
+const res = await api.post("/api/upload",formData,{
+  headers: { "Content-Type": "multipart/form-data" }
+})
       
-    } catch (error) {
+console.log(res.data.data)
+console.log(res.data.message)
+setAnalysis(res.data.data);
+    } 
+    catch (error) {
       console.error('Error analyzing contract:', error);
       alert('Failed to analyze contract. Please try again.');
       setAnalyzing(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Header />
