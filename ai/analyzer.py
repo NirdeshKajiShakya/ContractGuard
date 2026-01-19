@@ -57,8 +57,8 @@ def run(text_content):
     """
     if not text_content or not text_content.strip():
         return {"error": "Input text is empty or contains only whitespace."}
-
-    prompt = PROMPT_TEMPLATE.format(contract_text=text_content[:28000])  # Truncate to be safe
+    
+    prompt = PROMPT_TEMPLATE.format(contract_text=text_content)
 
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -70,15 +70,24 @@ def run(text_content):
         "messages": [
             {"role": "user", "content": prompt}
         ],
-
+        "max_tokens": 4000,
+        "temperature": 0.7
     }
 
     try:
-        response = requests.post(OPENROUTER_URL, headers=headers, json=payload)
+        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         
         response_data = response.json()
+        
+        # Check if response has expected structure
+        if "choices" not in response_data or len(response_data["choices"]) == 0:
+            return {"error": "Invalid API response structure", "raw_response": str(response_data)}
+        
         ai_response = response_data["choices"][0]["message"]["content"]
+        
+        if not ai_response or ai_response.strip() == "":
+            return {"error": "AI returned empty response", "raw_response": ""}
         
         # Better JSON extraction - handle code blocks and find JSON object
         json_match = re.search(r'\{[\s\S]*"analysis"[\s\S]*\][\s\S]*\}', ai_response)
@@ -87,13 +96,22 @@ def run(text_content):
         else:
             cleaned_text = ai_response.strip().replace("```json", "").replace("```", "").strip()
         
-        return json.loads(cleaned_text)
-    except json.JSONDecodeError:
-        return {"error": "AI response was not valid JSON.", "raw_response": ai_response if 'ai_response' in locals() else "No response"}
+        parsed_result = json.loads(cleaned_text)
+        
+        # Ensure the result has the expected structure
+        if "analysis" not in parsed_result:
+            return {"error": "AI response missing 'analysis' field", "raw_response": ai_response[:500]}
+        
+        return parsed_result
+        
+    except json.JSONDecodeError as e:
+        return {"error": f"AI response was not valid JSON: {str(e)}", "raw_response": ai_response[:500] if 'ai_response' in locals() and ai_response else "No response"}
+    except requests.exceptions.Timeout:
+        return {"error": "API request timed out. The input may be too large or the service is slow."}
     except requests.exceptions.RequestException as e:
-        return {"error": f"API request failed: {e}"}
+        return {"error": f"API request failed: {str(e)}"}
     except Exception as e:
-        return {"error": f"An unexpected error occurred: {e}"}
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
 # Main execution block - reads from stdin and outputs to stdout
 if __name__ == "__main__":
