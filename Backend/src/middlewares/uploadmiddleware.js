@@ -1,10 +1,6 @@
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 
-
-
-
-
 const storage = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [
