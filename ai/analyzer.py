@@ -4,6 +4,7 @@ import requests
 import json
 from dotenv import load_dotenv
 import re
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,6 +16,7 @@ if not API_KEY:
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+# MODEL = "tngtech/deepseek-r1t2-chimera:free"
 
 # --- Prompt Engineering ---
 PROMPT_TEMPLATE = """
@@ -45,20 +47,55 @@ Example output:
 }}
 """
 
-def run(text_content):
+def chunk_text(text, chunk_size=15000, overlap=500):
     """
-    Analyzes the contract text using the OpenRouter API with Llama. 
-
-    Args:
-        text_content:  The full text of the contract. 
-
-    Returns:
-        A dictionary containing the structured analysis or an error. 
-    """
-    if not text_content or not text_content.strip():
-        return {"error": "Input text is empty or contains only whitespace."}
+    Split text into overlapping chunks to ensure clauses aren't cut off.
     
-    prompt = PROMPT_TEMPLATE.format(contract_text=text_content)
+    Args:
+        text: The text to chunk
+        chunk_size: Maximum size of each chunk
+        overlap: Number of characters to overlap between chunks
+    
+    Returns:
+        List of text chunks
+    """
+    if len(text) <= chunk_size:
+        return [text]
+    
+    chunks = []
+    start = 0
+    
+    while start < len(text):
+        end = start + chunk_size
+        
+        # If this isn't the last chunk, try to break at a sentence or paragraph
+        if end < len(text):
+            # Look for sentence endings in the last 200 chars of the chunk
+            last_period = text.rfind('.', end - 200, end)
+            last_newline = text.rfind('\n', end - 200, end)
+            break_point = max(last_period, last_newline)
+            
+            if break_point > start:
+                end = break_point + 1
+        
+        chunks.append(text[start:end])
+        start = end - overlap  # Overlap to avoid missing clauses at boundaries
+    
+    return chunks
+
+def analyze_chunk(chunk, chunk_num, total_chunks):
+    """
+    Analyze a single chunk of contract text.
+    """
+    sys.stderr.write(f"Analyzing chunk {chunk_num}/{total_chunks} ({len(chunk)} characters)...\n")
+    
+    # Add delay between chunks to avoid rate limiting
+    if chunk_num > 1:
+        delay = 10  # Wait 10 seconds between chunks
+        sys.stderr.write(f"Waiting {delay} seconds to avoid rate limits...\n")
+        time.sleep(delay)
+    
+    prompt = PROMPT_TEMPLATE.format(contract_text=chunk)
 
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -75,21 +112,23 @@ def run(text_content):
     }
 
     try:
-        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
+        response = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
         
         response_data = response.json()
         
-        # Check if response has expected structure
         if "choices" not in response_data or len(response_data["choices"]) == 0:
-            return {"error": "Invalid API response structure", "raw_response": str(response_data)}
+            sys.stderr.write(f"Chunk {chunk_num}: Invalid response structure\n")
+            return {"error": "Invalid API response structure", "raw_response": str(response_data)[:500]}
         
         ai_response = response_data["choices"][0]["message"]["content"]
         
         if not ai_response or ai_response.strip() == "":
-            return {"error": "AI returned empty response", "raw_response": ""}
+            if "error" in response_data:
+                return {"error": f"API Error: {response_data['error']}"}
+            return {"error": "AI returned empty response"}
         
-        # Better JSON extraction - handle code blocks and find JSON object
+        # Extract JSON from response
         json_match = re.search(r'\{[\s\S]*"analysis"[\s\S]*\][\s\S]*\}', ai_response)
         if json_match:
             cleaned_text = json_match.group(0)
@@ -98,20 +137,85 @@ def run(text_content):
         
         parsed_result = json.loads(cleaned_text)
         
-        # Ensure the result has the expected structure
         if "analysis" not in parsed_result:
-            return {"error": "AI response missing 'analysis' field", "raw_response": ai_response[:500]}
+            return {"error": "AI response missing 'analysis' field"}
         
+        sys.stderr.write(f"Chunk {chunk_num}: Found {len(parsed_result.get('analysis', []))} risk items\n")
         return parsed_result
         
     except json.JSONDecodeError as e:
-        return {"error": f"AI response was not valid JSON: {str(e)}", "raw_response": ai_response[:500] if 'ai_response' in locals() and ai_response else "No response"}
+        sys.stderr.write(f"Chunk {chunk_num}: JSON decode error: {e}\n")
+        return {"error": f"Invalid JSON: {str(e)}"}
     except requests.exceptions.Timeout:
-        return {"error": "API request timed out. The input may be too large or the service is slow."}
+        sys.stderr.write(f"Chunk {chunk_num}: Request timed out\n")
+        return {"error": "Request timed out"}
     except requests.exceptions.RequestException as e:
+        sys.stderr.write(f"Chunk {chunk_num}: Request failed: {e}\n")
         return {"error": f"API request failed: {str(e)}"}
     except Exception as e:
-        return {"error": f"An unexpected error occurred: {str(e)}"}
+        sys.stderr.write(f"Chunk {chunk_num}: Unexpected error: {e}\n")
+        return {"error": f"Unexpected error: {str(e)}"}
+
+def run(text_content):
+    """
+    Analyzes the contract text using the OpenRouter API with Llama.
+    Automatically chunks large contracts and combines results.
+
+    Args:
+        text_content:  The full text of the contract. 
+
+    Returns:
+        A dictionary containing the structured analysis or an error. 
+    """
+    if not text_content or not text_content.strip():
+        return {"error": "Input text is empty or contains only whitespace."}
+    
+    sys.stderr.write(f"Processing contract with {len(text_content)} characters\n")
+    
+    # Split into chunks if text is large
+    chunks = chunk_text(text_content, chunk_size=15000, overlap=500)
+    total_chunks = len(chunks)
+    
+    sys.stderr.write(f"Split into {total_chunks} chunk(s)\n")
+    
+    # Analyze each chunk
+    all_analyses = []
+    errors = []
+    
+    for i, chunk in enumerate(chunks, 1):
+        result = analyze_chunk(chunk, i, total_chunks)
+        
+        if "error" in result:
+            errors.append(f"Chunk {i}: {result['error']}")
+            # Continue processing other chunks even if one fails
+            continue
+        
+        if "analysis" in result and isinstance(result["analysis"], list):
+            all_analyses.extend(result["analysis"])
+    
+    # If all chunks failed, return error
+    if errors and not all_analyses:
+        return {"error": f"Analysis failed: {'; '.join(errors)}"}
+    
+    # Remove duplicate risk items (might occur at chunk boundaries)
+    unique_analyses = []
+    seen_clauses = set()
+    
+    for item in all_analyses:
+        # Use first 100 chars of clause text as identifier
+        clause_id = item.get("clause_text", "")[:100].strip()
+        if clause_id and clause_id not in seen_clauses:
+            seen_clauses.add(clause_id)
+            unique_analyses.append(item)
+    
+    sys.stderr.write(f"Total unique risk items found: {len(unique_analyses)}\n")
+    
+    # Include warnings if some chunks failed
+    result = {"analysis": unique_analyses}
+    if errors:
+        result["warnings"] = errors
+    
+    return result
 
 # Main execution block - reads from stdin and outputs to stdout
 if __name__ == "__main__":
